@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Action Space Explorer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0b0d12;
+    --panel:#12151c;
+    --panel-border:#232837;
+    --text:#e7ecf3;
+    --text-dim:#8892a4;
+    --accent:#5fd4c0;
+    --accent-dim:#2c5a52;
+    --mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);overflow:hidden;}
+  #app{position:relative;width:100vw;height:100vh;}
+  #canvas-wrap{position:absolute;inset:0;}
+  canvas{display:block;}
+
+  #panel{
+    position:absolute;top:16px;left:16px;width:268px;
+    background:var(--panel);border:1px solid var(--panel-border);
+    border-radius:10px;padding:16px;
+    box-shadow:0 12px 32px rgba(0,0,0,.45);
+    font-size:12.5px;
+  }
+  #panel h1{
+    font-size:13px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--accent);margin:0 0 2px 0;font-weight:600;
+  }
+  #panel .sub{color:var(--text-dim);font-size:11px;margin-bottom:14px;}
+  .row{margin-bottom:10px;}
+  .row label{
+    display:block;color:var(--text-dim);font-size:10.5px;
+    text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;
+  }
+  .row.axis-x label{color:#ff8a80;}
+  .row.axis-y label{color:#82e0aa;}
+  .row.axis-z label{color:#82b1ff;}
+  select{
+    width:100%;background:#1a1f2b;color:var(--text);
+    border:1px solid var(--panel-border);border-radius:6px;
+    padding:6px 8px;font-size:12.5px;font-family:var(--sans);
+    appearance:none;cursor:pointer;
+  }
+  select:focus{outline:1px solid var(--accent);}
+  .divider{height:1px;background:var(--panel-border);margin:14px 0;}
+  .colorswatch{
+    display:inline-block;width:10px;height:10px;border-radius:50%;
+    margin-right:6px;vertical-align:middle;
+  }
+  .toggles label{
+    display:flex;align-items:center;gap:6px;color:var(--text);
+    font-size:12px;margin-bottom:6px;cursor:pointer;
+  }
+  input[type=checkbox]{accent-color:var(--accent);}
+  input[type=range]{width:100%;accent-color:var(--accent);}
+  #hint{color:var(--text-dim);font-size:10.5px;line-height:1.5;margin-top:12px;}
+
+  #tooltip{
+    position:absolute;pointer-events:none;
+    background:rgba(15,18,25,.95);border:1px solid var(--panel-border);
+    border-radius:6px;padding:6px 9px;font-family:var(--mono);
+    font-size:11.5px;color:var(--text);display:none;white-space:nowrap;
+    z-index:20;
+  }
+  #tooltip .name{color:var(--accent);font-weight:600;}
+  #tooltip .f{color:var(--text-dim);}
+
+  .labelDiv{
+    position:absolute;pointer-events:none;color:#c9d1e0;
+    font-family:var(--mono);font-size:10px;
+    text-shadow:0 1px 3px rgba(0,0,0,.9), 0 0 6px rgba(0,0,0,.6);
+    transform:translate(6px,-6px);white-space:nowrap;
+  }
+
+  #legend{
+    position:absolute;bottom:16px;left:16px;
+    background:var(--panel);border:1px solid var(--panel-border);
+    border-radius:10px;padding:12px 14px;font-size:11px;color:var(--text-dim);
+    width:236px;
+  }
+  #legend .lg-title{color:var(--text);font-size:11px;margin-bottom:8px;font-weight:600;}
+  #legend .grad{height:10px;border-radius:5px;margin:4px 0 2px 0;}
+  #legend .grad-labels{display:flex;justify-content:space-between;font-size:10px;}
+
+  #count{
+    position:absolute;top:16px;right:16px;
+    background:var(--panel);border:1px solid var(--panel-border);
+    border-radius:10px;padding:8px 12px;font-family:var(--mono);
+    font-size:11px;color:var(--text-dim);
+  }
+
+  #exportPanel{
+    position:absolute;top:16px;right:16px;margin-top:52px;width:220px;
+    background:var(--panel);border:1px solid var(--panel-border);
+    border-radius:10px;padding:14px;font-size:12px;
+  }
+  #exportPanel h2{
+    font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--accent);margin:0 0 10px 0;font-weight:600;
+  }
+  #exportPanel .row{margin-bottom:9px;}
+  #exportPanel label{display:block;color:var(--text-dim);font-size:10.5px;
+    text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;}
+  #exportPanel input[type=text]{
+    width:100%;background:#1a1f2b;color:var(--text);
+    border:1px solid var(--panel-border);border-radius:6px;
+    padding:6px 8px;font-size:12px;font-family:var(--mono);
+  }
+  .expBtns{display:flex;gap:8px;margin-top:10px;}
+  .expBtn{
+    flex:1;background:var(--accent-dim);color:var(--accent);
+    border:1px solid var(--accent-dim);border-radius:6px;
+    padding:7px 0;font-size:11.5px;font-weight:600;cursor:pointer;
+    letter-spacing:.03em;
+  }
+  .expBtn:hover{background:var(--accent);color:#0b0d12;}
+  #exportNote{color:var(--text-dim);font-size:10px;line-height:1.4;margin-top:8px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="canvas-wrap"></div>
+
+  <div id="panel">
+    <h1>Action Space</h1>
+    <div class="sub">5D factor-score explorer</div>
+
+    <div class="row axis-x">
+      <label>X axis</label>
+      <select id="sel-x"></select>
+    </div>
+    <div class="row axis-y">
+      <label>Y axis</label>
+      <select id="sel-y"></select>
+    </div>
+    <div class="row axis-z">
+      <label>Z axis</label>
+      <select id="sel-z"></select>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="row">
+      <label><span class="colorswatch" style="background:linear-gradient(90deg,#3fae5e,#e6483c)"></span>Colour: red&ndash;green (a*)</label>
+      <select id="sel-rg"></select>
+    </div>
+    <div class="row">
+      <label><span class="colorswatch" style="background:linear-gradient(90deg,#3f6fe6,#e6c93f)"></span>Colour: blue&ndash;yellow (b*)</label>
+      <select id="sel-by"></select>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="toggles">
+      <label><input type="checkbox" id="toggle-labels"> Show all labels</label>
+      <label><input type="checkbox" id="toggle-spin"> Auto-rotate</label>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <label>Point size</label>
+      <input type="range" id="sizeSlider" min="0.4" max="2.2" step="0.1" value="1">
+    </div>
+
+    <div id="hint">Drag to rotate &middot; scroll to zoom &middot; hover a sphere for its name &middot; right-drag to pan</div>
+  </div>
+
+  <div id="count"></div>
+
+  <div id="exportPanel">
+    <h2>Export figure</h2>
+    <div class="row">
+      <label>Resolution</label>
+      <select id="exp-res">
+        <option value="1">Screen (1&times;)</option>
+        <option value="2" selected>Print (2&times;)</option>
+        <option value="4">High-res print (4&times;)</option>
+      </select>
+    </div>
+    <div class="row">
+      <label>Background</label>
+      <select id="exp-bg">
+        <option value="dark">Dark (on-screen theme)</option>
+        <option value="light">White</option>
+        <option value="transparent">Transparent (PNG only)</option>
+      </select>
+    </div>
+    <div class="row">
+      <label>Filename</label>
+      <input type="text" id="exp-name" value="action_space">
+    </div>
+    <div class="expBtns">
+      <button class="expBtn" id="btn-png">PNG</button>
+      <button class="expBtn" id="btn-pdf">PDF</button>
+    </div>
+    <div id="exportNote">Captures the current rotation exactly as framed. Transparent falls back to white for PDF.</div>
+  </div>
+
+  <div id="tooltip"></div>
+
+  <div id="legend">
+    <div class="lg-title">Colour = opponent channels (CIELAB)</div>
+    <div class="grad" style="background:linear-gradient(90deg,#3fae5e,#8f8f8f,#e6483c)"></div>
+    <div class="grad-labels"><span id="rg-lo">green</span><span id="rg-hi">red</span></div>
+    <div class="grad" style="background:linear-gradient(90deg,#3f6fe6,#8f8f8f,#e6c93f)"></div>
+    <div class="grad-labels"><span id="by-lo">blue</span><span id="by-hi">yellow</span></div>
+  </div>
+</div>
+
+<script>
+/* ---------- DATA ---------- */
+const DATA = {"factors": ["Formidable", "Friendly", "Locomotion", "Abducting", "EnvironmentalInteraction"], "actions": [{"Action Name": "agreeing", "Formidable": 1.02411763528315, "Friendly": 1.72261494927935, "Locomotion": -1.18048944149123, "Abducting": 0.118899756485333, "EnvironmentalInteraction": -1.42663453215649}, {"Action Name": "answering", "Formidable": 0.696915505933895, "Friendly": 1.24132160024367, "Locomotion": 0.604764198233383, "Abducting": -1.41953749201117, "EnvironmentalInteraction": 1.19777831902196}, {"Action Name": "applyinghand", "Formidable": -0.353228621919932, "Friendly": 0.551420096611281, "Locomotion": -0.886727526515612, "Abducting": -1.09717222627015, "EnvironmentalInteraction": 0.39801962345693}, {"Action Name": "applyingface", "Formidable": -0.79528640102719, "Friendly": 0.427634032404686, "Locomotion": -1.06550133671743, "Abducting": -1.61982277304729, "EnvironmentalInteraction": -0.347804008209509}, {"Action Name": "askingdown", "Formidable": 0.14389542183658, "Friendly": -1.17053043668284, "Locomotion": -1.1925642655126, "Abducting": 0.0712409092866065, "EnvironmentalInteraction": -0.971676336152916}, {"Action Name": "askingup", "Formidable": 0.756474229423774, "Friendly": 1.67132581401171, "Locomotion": -1.0808597009294, "Abducting": -0.385919991719833, "EnvironmentalInteraction": -1.12259333257164}, {"Action Name": "comparing", "Formidable": 0.217644966036929, "Friendly": 0.484848886024363, "Locomotion": -0.985593491264258, "Abducting": -0.208590072754032, "EnvironmentalInteraction": -0.967480547487231}, {"Action Name": "attaching", "Formidable": -0.571998078272613, "Friendly": 0.282604058228456, "Locomotion": -0.756275271857347, "Abducting": -0.138169134735209, "EnvironmentalInteraction": 0.921551577678797}, {"Action Name": "scrunching", "Formidable": -0.982176238827923, "Friendly": 0.0220586371011223, "Locomotion": -1.41103560082493, "Abducting": -0.156129643164222, "EnvironmentalInteraction": 0.860318963217737}, {"Action Name": "snapping", "Formidable": -0.804239439229343, "Friendly": -0.491194168094274, "Locomotion": -0.669317897845662, "Abducting": -0.834196674168586, "EnvironmentalInteraction": 0.57062487781018}, {"Action Name": "bending", "Formidable": -1.23766101240429, "Friendly": -0.81590148506322, "Locomotion": -1.35304813098511, "Abducting": 0.145998109363773, "EnvironmentalInteraction": 0.115999541319791}, {"Action Name": "liftingfloor", "Formidable": 0.1988569801805, "Friendly": 0.517225004666398, "Locomotion": 1.00852723806373, "Abducting": -1.3080496667414, "EnvironmentalInteraction": 2.13510173720912}, {"Action Name": "bouncing", "Formidable": 1.01757236278158, "Friendly": 1.74375113332858, "Locomotion": 1.42373332782968, "Abducting": 0.495835936786045, "EnvironmentalInteraction": 1.97785723010247}, {"Action Name": "browsing", "Formidable": -0.0464997998228303, "Friendly": 0.0927419578982999, "Locomotion": -0.0566681954361984, "Abducting": -0.373952071362412, "EnvironmentalInteraction": 0.216056398577331}, {"Action Name": "brushinghair", "Formidable": 0.0197595457714231, "Friendly": 0.62244264343869, "Locomotion": -0.305040716687808, "Abducting": -0.916474894684422, "EnvironmentalInteraction": 0.507365124017823}, {"Action Name": "brushingteeth", "Formidable": -0.864287868973676, "Friendly": -0.795633101821546, "Locomotion": -1.00514936363809, "Abducting": -1.37667078260902, "EnvironmentalInteraction": -0.287134584576527}, {"Action Name": "carrying", "Formidable": 1.17154043735225, "Friendly": 0.700892159148897, "Locomotion": 0.615441768005224, "Abducting": -1.06343407868892, "EnvironmentalInteraction": 1.44159232980222}, {"Action Name": "catchingheavy", "Formidable": 0.594298389158892, "Friendly": -0.220025969450273, "Locomotion": -0.0126605730225408, "Abducting": -0.55107358258524, "EnvironmentalInteraction": 0.858445317049001}, {"Action Name": "catchingsmall", "Formidable": 0.47016686707476, "Friendly": 0.511543383544376, "Locomotion": 0.162216202303872, "Abducting": -1.18434021561775, "EnvironmentalInteraction": 0.631938450003443}, {"Action Name": "celebratingalone", "Formidable": 2.54692710512554, "Friendly": 2.13004076307827, "Locomotion": 1.66407375360388, "Abducting": 1.34867854819649, "EnvironmentalInteraction": -0.423815658412186}, {"Action Name": "celebratingtogether", "Formidable": 1.97687569907197, "Friendly": -0.0949713941245388, "Locomotion": 1.45787153656251, "Abducting": 0.722560677646699, "EnvironmentalInteraction": -0.39420253266669}, {"Action Name": "checking", "Formidable": -0.569611669005732, "Friendly": 0.271927745411462, "Locomotion": 1.4297849578921, "Abducting": 0.00541799591636412, "EnvironmentalInteraction": -0.904632404769513}, {"Action Name": "cheeringup", "Formidable": 0.914796766912545, "Friendly": -0.324908967153099, "Locomotion": -0.313830759043435, "Abducting": -0.0769408513236474, "EnvironmentalInteraction": -1.2777431369065}, {"Action Name": "clapping", "Formidable": 1.22259527264327, "Friendly": 1.88434220776227, "Locomotion": -1.1689532957649, "Abducting": 0.2683408238859, "EnvironmentalInteraction": -0.576357282972163}, {"Action Name": "closing", "Formidable": -1.02084779036001, "Friendly": -0.257930679516523, "Locomotion": -0.9263431750853, "Abducting": -0.300478051404716, "EnvironmentalInteraction": 0.435727543205189}, {"Action Name": "counting", "Formidable": -0.831852830325861, "Friendly": 0.0783912949921674, "Locomotion": -1.19586296660355, "Abducting": -0.991304284575698, "EnvironmentalInteraction": 1.36298682388858}, {"Action Name": "overlaying", "Formidable": 0.147166891020766, "Friendly": -0.184885455025937, "Locomotion": 0.759180482674034, "Abducting": 0.615554975059737, "EnvironmentalInteraction": 0.507796347900155}, {"Action Name": "catchingsmallfail", "Formidable": 0.49602741124563, "Friendly": -0.526836699789504, "Locomotion": 0.938313398434345, "Abducting": -0.979283126806223, "EnvironmentalInteraction": 0.235473702776092}, {"Action Name": "refusing", "Formidable": 0.969300696452684, "Friendly": -0.917896309634459, "Locomotion": -0.278835664404855, "Abducting": 0.988145641603973, "EnvironmentalInteraction": -1.06496294756192}, {"Action Name": "crossing", "Formidable": -0.287741171365155, "Friendly": 0.839963437801773, "Locomotion": 0.0459965969322714, "Abducting": -0.812653626933174, "EnvironmentalInteraction": 0.0149233657877952}, {"Action Name": "crying", "Formidable": -1.02281448507853, "Friendly": -2.01296242896572, "Locomotion": -1.36579563733426, "Abducting": -0.577587861069836, "EnvironmentalInteraction": -1.27359593350979}, {"Action Name": "cutting", "Formidable": -0.765640974185389, "Friendly": 0.182105976745891, "Locomotion": -0.309603586990603, "Abducting": -0.313554454620475, "EnvironmentalInteraction": 1.44303243989756}, {"Action Name": "dancingalone", "Formidable": 1.85180110193149, "Friendly": 2.83794039604874, "Locomotion": 2.12318915298663, "Abducting": 0.424186506647481, "EnvironmentalInteraction": -0.225230101526646}, {"Action Name": "dancingpartner", "Formidable": 1.67832521869174, "Friendly": 2.25016353880462, "Locomotion": 1.75416466386908, "Abducting": 0.0620828981186673, "EnvironmentalInteraction": -0.503506006926935}, {"Action Name": "dancingtogether", "Formidable": 1.32409809829178, "Friendly": 2.42365816238947, "Locomotion": 2.03841430729896, "Abducting": 0.601547129509761, "EnvironmentalInteraction": -0.583870758363189}, {"Action Name": "digging", "Formidable": -0.48070793681062, "Friendly": -0.181494412065957, "Locomotion": 1.27796469427468, "Abducting": -0.741359197458324, "EnvironmentalInteraction": 1.37949100509313}, {"Action Name": "disagreeing", "Formidable": 1.31811756450567, "Friendly": -1.43036088981826, "Locomotion": -1.32377091296015, "Abducting": 0.964007849574963, "EnvironmentalInteraction": -1.05585449706371}, {"Action Name": "discussingpositive", "Formidable": -0.448926595887154, "Friendly": -0.279861129204975, "Locomotion": -0.329515075463891, "Abducting": 0.0219795306662664, "EnvironmentalInteraction": -1.37626949530052}, {"Action Name": "consoling", "Formidable": 0.0455445164212876, "Friendly": 0.33839406816514, "Locomotion": -0.394863030782123, "Abducting": 0.0124283013000498, "EnvironmentalInteraction": -0.908016364570396}, {"Action Name": "discussingneutral", "Formidable": 0.357591938911157, "Friendly": 0.0849174005430613, "Locomotion": -0.217616470565301, "Abducting": 0.0140095382667101, "EnvironmentalInteraction": -1.44971785154438}, {"Action Name": "drinking", "Formidable": 0.0352270005057555, "Friendly": 1.27549444431076, "Locomotion": -1.3828029445012, "Abducting": -1.886093932275, "EnvironmentalInteraction": 1.3966695109217}, {"Action Name": "dropping", "Formidable": -0.759155684940465, "Friendly": -1.15658210023302, "Locomotion": 1.43741557506658, "Abducting": -0.489722993206374, "EnvironmentalInteraction": -0.657965506404329}, {"Action Name": "releasing", "Formidable": -1.06252641329163, "Friendly": 0.100097638563969, "Locomotion": -1.21296534889078, "Abducting": -0.263527033112351, "EnvironmentalInteraction": 0.438780089415265}, {"Action Name": "eating", "Formidable": -0.64688214583175, "Friendly": 0.359729891195734, "Locomotion": -1.01313688978467, "Abducting": -1.31455984986406, "EnvironmentalInteraction": 0.482368535618372}, {"Action Name": "entering", "Formidable": -0.0244918867098515, "Friendly": 0.161281515561757, "Locomotion": 0.42583953052048, "Abducting": -0.702734321219248, "EnvironmentalInteraction": 0.676776874863617}, {"Action Name": "exchanging", "Formidable": 0.103204364127732, "Friendly": 0.030638794873034, "Locomotion": 0.192138267455878, "Abducting": -0.240693963675315, "EnvironmentalInteraction": 0.211019602132345}, {"Action Name": "blowing", "Formidable": -0.820160613360145, "Friendly": -0.642106909725383, "Locomotion": -0.179029036448786, "Abducting": 0.119826838661777, "EnvironmentalInteraction": 0.205527832553256}, {"Action Name": "explaining", "Formidable": 0.699439298825908, "Friendly": 0.216713856159239, "Locomotion": -0.690228395841404, "Abducting": -0.375888948246746, "EnvironmentalInteraction": -1.01033849158055}, {"Action Name": "struggling", "Formidable": -1.07392644272705, "Friendly": -0.163267864670503, "Locomotion": -0.801649868120247, "Abducting": -0.383214454561983, "EnvironmentalInteraction": 1.11008996270117}, {"Action Name": "falling", "Formidable": -1.34008738566775, "Friendly": -2.05745334303385, "Locomotion": 2.77251484435126, "Abducting": -0.332367593340012, "EnvironmentalInteraction": -0.52077554731982}, {"Action Name": "fanning", "Formidable": 1.38523931556017, "Friendly": -0.567326875637865, "Locomotion": -0.449098014052371, "Abducting": -1.11779540428501, "EnvironmentalInteraction": -0.919455191097879}, {"Action Name": "cowering", "Formidable": -1.10987194520298, "Friendly": -1.03066321842412, "Locomotion": 1.38694999578599, "Abducting": -0.0995914515210142, "EnvironmentalInteraction": -0.847254217727403}, {"Action Name": "shoving", "Formidable": 2.22289975000037, "Friendly": -2.31087354207807, "Locomotion": 1.62510322614103, "Abducting": 1.91943154424023, "EnvironmentalInteraction": 0.876360025180061}, {"Action Name": "punching", "Formidable": 2.50268024599392, "Friendly": -2.32573821094274, "Locomotion": 1.45627679698442, "Abducting": 2.55008883074775, "EnvironmentalInteraction": 0.602307753706036}, {"Action Name": "slapping", "Formidable": 2.20027114428188, "Friendly": -2.21300096451989, "Locomotion": 0.983726636131059, "Abducting": 2.20487683516256, "EnvironmentalInteraction": 0.980771061609403}, {"Action Name": "fistbumping", "Formidable": 0.594406302626467, "Friendly": 0.544031851868518, "Locomotion": -0.25777759381788, "Abducting": -0.0111391132570089, "EnvironmentalInteraction": -0.955733204983257}, {"Action Name": "flicking", "Formidable": 0.235174878905611, "Friendly": 0.0566961713842766, "Locomotion": -1.15624896759895, "Abducting": -0.924280451162591, "EnvironmentalInteraction": -0.444164749985916}, {"Action Name": "folding", "Formidable": -0.941304331605325, "Friendly": -0.0982393770807649, "Locomotion": -0.973372364859097, "Abducting": -0.299538614211645, "EnvironmentalInteraction": 0.52333023403315}, {"Action Name": "following", "Formidable": -1.55998862851068, "Friendly": -1.07625931051238, "Locomotion": 1.64460521952818, "Abducting": 0.0140115693836223, "EnvironmentalInteraction": -0.934596394762537}, {"Action Name": "gesturingtowards", "Formidable": 1.31413271947601, "Friendly": 1.15973469385885, "Locomotion": -1.18966932931197, "Abducting": -0.76903166272988, "EnvironmentalInteraction": -0.881068742018125}, {"Action Name": "indicating", "Formidable": 1.54443975408253, "Friendly": -0.912830570734036, "Locomotion": -0.189688154948251, "Abducting": 1.379885698508, "EnvironmentalInteraction": -0.88204369693218}, {"Action Name": "ducking", "Formidable": 0.0831003525703606, "Friendly": -1.23682915640727, "Locomotion": 1.59146852872749, "Abducting": 0.257021964509766, "EnvironmentalInteraction": -0.32845468406282}, {"Action Name": "standing", "Formidable": 0.543352924175177, "Friendly": 0.56767158829963, "Locomotion": 1.05457644788304, "Abducting": 1.07166825102173, "EnvironmentalInteraction": 0.210118979944053}, {"Action Name": "giving", "Formidable": 0.170956727194551, "Friendly": 0.515712207812041, "Locomotion": 0.830037786548414, "Abducting": 0.735563306273731, "EnvironmentalInteraction": 0.880083110172437}, {"Action Name": "hammering", "Formidable": 0.457301339673952, "Friendly": -0.398547106342305, "Locomotion": 0.187143701866082, "Abducting": 0.662536609806439, "EnvironmentalInteraction": 2.10083486133019}, {"Action Name": "handshaking", "Formidable": 0.408460075125034, "Friendly": 0.553076010497295, "Locomotion": 0.0757338995215985, "Abducting": -0.257528111186394, "EnvironmentalInteraction": -0.596300712865343}, {"Action Name": "highfiving", "Formidable": 1.41118688588391, "Friendly": 1.30699989149331, "Locomotion": 0.115874462790336, "Abducting": 1.47988211859664, "EnvironmentalInteraction": -0.786352373461941}, {"Action Name": "swatting", "Formidable": 1.19243050442617, "Friendly": -0.802387026441626, "Locomotion": 0.282178666446145, "Abducting": 2.473942237417, "EnvironmentalInteraction": 0.62181944370164}, {"Action Name": "batting", "Formidable": 0.542979698743399, "Friendly": -0.107926325205577, "Locomotion": -0.075331081053363, "Abducting": 2.98341424376301, "EnvironmentalInteraction": 0.58821572567309}, {"Action Name": "hitting", "Formidable": 1.16559791607789, "Friendly": -1.6626291474779, "Locomotion": 1.37498064042118, "Abducting": 2.17785206277077, "EnvironmentalInteraction": 0.548368931641803}, {"Action Name": "gathering", "Formidable": -0.418958492657485, "Friendly": 0.482497674113263, "Locomotion": -0.715480602836541, "Abducting": -0.848417906243612, "EnvironmentalInteraction": 1.27034671582973}, {"Action Name": "holding", "Formidable": -1.30309006914454, "Friendly": -0.362504978342148, "Locomotion": -1.41370870294107, "Abducting": -0.817140401926288, "EnvironmentalInteraction": -0.830498396789094}, {"Action Name": "hugging", "Formidable": 1.47277726344626, "Friendly": 2.02311085103931, "Locomotion": 0.26611422007821, "Abducting": -0.181119079933129, "EnvironmentalInteraction": -0.664458801013597}, {"Action Name": "hushing", "Formidable": 1.24390628085478, "Friendly": -0.161765196509604, "Locomotion": -0.528190746093757, "Abducting": 0.54674506197868, "EnvironmentalInteraction": -0.680774964506314}, {"Action Name": "gesturingaside", "Formidable": 1.16879856294691, "Friendly": -0.617823109814844, "Locomotion": -0.00385491051125026, "Abducting": 1.48265391340117, "EnvironmentalInteraction": -0.270411695618039}, {"Action Name": "measuring", "Formidable": 0.23619101673781, "Friendly": 0.77206143925773, "Locomotion": -0.388143665842316, "Abducting": 0.880893823321822, "EnvironmentalInteraction": -1.32238811062208}, {"Action Name": "offering", "Formidable": 0.434260132331127, "Friendly": 0.270086938974011, "Locomotion": -0.0431826177336855, "Abducting": -0.130633314115248, "EnvironmentalInteraction": -0.677494672197552}, {"Action Name": "jumping", "Formidable": -0.00736268327979013, "Friendly": 1.23889434057646, "Locomotion": 1.48828961558656, "Abducting": 0.943870694110838, "EnvironmentalInteraction": -0.136427523244113}, {"Action Name": "passing", "Formidable": -0.410264555913738, "Friendly": 0.985345402190686, "Locomotion": 0.328776362680109, "Abducting": 1.56627292224789, "EnvironmentalInteraction": 0.24030517066175}, {"Action Name": "shooting", "Formidable": 1.35320841833656, "Friendly": 0.449176789252487, "Locomotion": 1.60991354980911, "Abducting": 2.73619480168693, "EnvironmentalInteraction": 1.65440433418331}, {"Action Name": "kicking", "Formidable": 1.18841456024393, "Friendly": -2.52731227686808, "Locomotion": 1.59971513091155, "Abducting": 1.81719439441936, "EnvironmentalInteraction": 0.764093975500943}, {"Action Name": "kissing", "Formidable": -0.247391849409564, "Friendly": -0.0262736030856651, "Locomotion": 0.363403944524687, "Abducting": -0.436808994039008, "EnvironmentalInteraction": -0.994726306438947}, {"Action Name": "bumping", "Formidable": -0.405961365295968, "Friendly": -1.40311566864319, "Locomotion": 2.2520359290235, "Abducting": -0.216557657113881, "EnvironmentalInteraction": -1.82743811339263}, {"Action Name": "barging", "Formidable": 0.205007571924286, "Friendly": -1.30816404515791, "Locomotion": 1.50525126965745, "Abducting": 0.188331753078369, "EnvironmentalInteraction": -0.991789743546294}, {"Action Name": "laughing", "Formidable": 0.891992101154791, "Friendly": 2.35368182427642, "Locomotion": 1.25580228039442, "Abducting": -0.163248688166603, "EnvironmentalInteraction": -1.70059147475684}, {"Action Name": "cackling", "Formidable": -1.37152571395423, "Friendly": -0.14757914269286, "Locomotion": -1.13215396110138, "Abducting": 0.226188399244452, "EnvironmentalInteraction": -1.61374185323952}, {"Action Name": "laying", "Formidable": -0.983273278868093, "Friendly": -0.0169165124045347, "Locomotion": -0.596122400968767, "Abducting": -0.301144471443638, "EnvironmentalInteraction": 0.59283353100261}, {"Action Name": "departing", "Formidable": -1.71336046936335, "Friendly": -0.837026431113297, "Locomotion": 1.09881696134581, "Abducting": 0.299386295002169, "EnvironmentalInteraction": -0.404637691888987}, {"Action Name": "abandoning", "Formidable": -1.01408479549121, "Friendly": -0.626908968771627, "Locomotion": 1.20565589500739, "Abducting": 0.194175391785141, "EnvironmentalInteraction": 0.738155622647527}, {"Action Name": "balancing", "Formidable": -0.315555008460525, "Friendly": 0.0847937559977459, "Locomotion": -0.320733395728759, "Abducting": -0.993318623402446, "EnvironmentalInteraction": 1.36189074781242}, {"Action Name": "locking", "Formidable": -1.02237866636062, "Friendly": -0.512944624964066, "Locomotion": 0.457911691735273, "Abducting": -0.528458472425299, "EnvironmentalInteraction": 0.774093009716601}, {"Action Name": "looking", "Formidable": -1.81121722378634, "Friendly": -0.428053608014049, "Locomotion": -0.159517893884634, "Abducting": -0.291400112453201, "EnvironmentalInteraction": -1.64700447059709}, {"Action Name": "lunging", "Formidable": 0.0940769789596169, "Friendly": -0.453371479399755, "Locomotion": 1.78629617775085, "Abducting": 1.38838225846751, "EnvironmentalInteraction": 2.04569929816738}, {"Action Name": "phoning", "Formidable": 0.546117786694636, "Friendly": 1.08909734675638, "Locomotion": -1.60902249438948, "Abducting": 0.0991130703004756, "EnvironmentalInteraction": 0.325158720135755}, {"Action Name": "bowling", "Formidable": -0.228965803487375, "Friendly": 1.31759440595447, "Locomotion": 0.369261634919006, "Abducting": 1.40162646814523, "EnvironmentalInteraction": 1.74383108800002}, {"Action Name": "meeting", "Formidable": 1.39076873136211, "Friendly": 0.932322867926807, "Locomotion": 0.29243594259487, "Abducting": 0.507649303852779, "EnvironmentalInteraction": -1.21089282529486}, {"Action Name": "mopping", "Formidable": -0.562196624501131, "Friendly": 0.781279002252892, "Locomotion": 0.575707961117904, "Abducting": -0.0761537909183751, "EnvironmentalInteraction": 1.41462526738092}, {"Action Name": "rejecting", "Formidable": -1.35516655257518, "Friendly": -0.363697372404729, "Locomotion": -0.732989807453363, "Abducting": 0.0955476437760605, "EnvironmentalInteraction": -0.182440997381656}, {"Action Name": "movingfoot", "Formidable": -1.0138479645113, "Friendly": -0.533938046861682, "Locomotion": -0.0259123440443727, "Abducting": 1.26144206233728, "EnvironmentalInteraction": 1.00914265136502}, {"Action Name": "movinghand", "Formidable": -0.338368479506207, "Friendly": -0.0787343383397846, "Locomotion": -0.635323482537031, "Abducting": 1.07351279419614, "EnvironmentalInteraction": -0.178274525643399}, {"Action Name": "joining", "Formidable": -0.76337486263294, "Friendly": -0.0479155589063388, "Locomotion": -1.02479485871462, "Abducting": -0.215674633657367, "EnvironmentalInteraction": 0.16272120729814}, {"Action Name": "separating", "Formidable": -0.710250781932016, "Friendly": -0.126128551362659, "Locomotion": -0.9728485126121, "Abducting": -0.277658609273005, "EnvironmentalInteraction": 0.57419951539212}, {"Action Name": "colliding", "Formidable": 0.762085359727918, "Friendly": -0.399579447994045, "Locomotion": 1.00355157897625, "Abducting": 0.158630361588862, "EnvironmentalInteraction": 1.08016946678855}, {"Action Name": "nodding", "Formidable": -0.972369160132635, "Friendly": 0.0375530395771793, "Locomotion": -1.48937902932458, "Abducting": -0.485199401331611, "EnvironmentalInteraction": -1.40437563402908}, {"Action Name": "unscrewing", "Formidable": -0.176648283811219, "Friendly": 0.339518816953552, "Locomotion": -0.903795197142585, "Abducting": -1.2992648131959, "EnvironmentalInteraction": 0.947961498868751}, {"Action Name": "opening", "Formidable": -1.1728945175322, "Friendly": 0.189133273585916, "Locomotion": -0.241781306799216, "Abducting": -0.0227288267005717, "EnvironmentalInteraction": 0.443123128441312}, {"Action Name": "encouraging", "Formidable": -0.238296658162072, "Friendly": 0.172358676667381, "Locomotion": -0.443918727870724, "Abducting": -0.299884044608729, "EnvironmentalInteraction": -1.16866979263501}, {"Action Name": "heartening", "Formidable": 0.56090745602352, "Friendly": 0.166793296021029, "Locomotion": 0.0475490891444805, "Abducting": -0.127337420102549, "EnvironmentalInteraction": 0.0439177893302604}, {"Action Name": "raisingobject", "Formidable": -0.772208249176581, "Friendly": 0.254296473679581, "Locomotion": -0.508908394368873, "Abducting": -1.00887993875853, "EnvironmentalInteraction": 0.892235828810503}, {"Action Name": "liftingheavy", "Formidable": -0.801153122558338, "Friendly": -0.0567847629359697, "Locomotion": -0.667463898488588, "Abducting": -0.769492647505744, "EnvironmentalInteraction": 0.723214052222211}, {"Action Name": "liftinglight", "Formidable": -0.0238362084555841, "Friendly": 0.265731143440674, "Locomotion": -0.250390030373178, "Abducting": -0.778474256669447, "EnvironmentalInteraction": 0.715777158362583}, {"Action Name": "selecting", "Formidable": -1.00073267507895, "Friendly": -0.367349701807397, "Locomotion": -0.518636583886659, "Abducting": -0.467649407084796, "EnvironmentalInteraction": -0.590886579874679}, {"Action Name": "playingphone", "Formidable": -0.889931595092547, "Friendly": 0.153466204697486, "Locomotion": -1.50214600714094, "Abducting": -0.39758257378642, "EnvironmentalInteraction": -0.1062327552956}, {"Action Name": "plugging", "Formidable": -0.990809771543349, "Friendly": -0.123571692136831, "Locomotion": -1.06061970418674, "Abducting": -0.421743487774807, "EnvironmentalInteraction": 0.698986551346844}, {"Action Name": "pointing", "Formidable": 0.858691630971486, "Friendly": -0.74797379550543, "Locomotion": -0.941795982267872, "Abducting": 0.971868267354098, "EnvironmentalInteraction": -1.02407422051804}, {"Action Name": "interesting", "Formidable": 1.83872827502755, "Friendly": -1.29428520991407, "Locomotion": 0.706616352985388, "Abducting": 1.13687801295523, "EnvironmentalInteraction": -0.618787713187029}, {"Action Name": "accusing", "Formidable": 2.33698208267081, "Friendly": -2.15504404446744, "Locomotion": 0.708377187532805, "Abducting": 1.94457630513972, "EnvironmentalInteraction": -0.598998485726405}, {"Action Name": "questioning", "Formidable": 0.558418484423992, "Friendly": 0.626804447795505, "Locomotion": -0.364423850924102, "Abducting": 0.424152799587543, "EnvironmentalInteraction": -1.2745382626201}, {"Action Name": "poking", "Formidable": -0.412665115499473, "Friendly": -0.368944098714486, "Locomotion": -0.658862167882402, "Abducting": 0.393386376638769, "EnvironmentalInteraction": 0.805961591673143}, {"Action Name": "nudging", "Formidable": -1.39379514114094, "Friendly": -0.210066371738811, "Locomotion": -1.63884756669884, "Abducting": -0.512732340007596, "EnvironmentalInteraction": -0.306257485882401}, {"Action Name": "proding", "Formidable": -0.647557551233115, "Friendly": 0.0457942633980363, "Locomotion": -0.779170783670664, "Abducting": -0.267406243641138, "EnvironmentalInteraction": 0.0799677434895679}, {"Action Name": "filling", "Formidable": -0.830220709045661, "Friendly": 0.618036910103762, "Locomotion": -1.25956723722975, "Abducting": -0.620830477442126, "EnvironmentalInteraction": 1.15524202782939}, {"Action Name": "emptying", "Formidable": -0.869148871591536, "Friendly": 0.581478437482797, "Locomotion": -1.6802033883186, "Abducting": -0.0060711357083475, "EnvironmentalInteraction": 1.45907493098338}, {"Action Name": "tearing", "Formidable": 0.490349475972011, "Friendly": -0.436558603045489, "Locomotion": 0.00849173011737378, "Abducting": -0.319766283838008, "EnvironmentalInteraction": 0.744487948615008}, {"Action Name": "covering", "Formidable": -0.614079093623375, "Friendly": 0.114547502406655, "Locomotion": -0.42270394115475, "Abducting": -0.86697199653506, "EnvironmentalInteraction": 0.266677233956559}, {"Action Name": "removingfail", "Formidable": -0.641147625543854, "Friendly": -0.372839662567855, "Locomotion": -0.745337223580145, "Abducting": -0.655869816258288, "EnvironmentalInteraction": 0.509556625097658}, {"Action Name": "stretching", "Formidable": -0.644637604612845, "Friendly": 0.299772102781275, "Locomotion": -0.323643002514318, "Abducting": 0.268634582670807, "EnvironmentalInteraction": -0.458255821735575}, {"Action Name": "jabbing", "Formidable": 1.71193210506374, "Friendly": -1.17315738812817, "Locomotion": 1.52764444931278, "Abducting": 2.53284455267803, "EnvironmentalInteraction": 0.572559443717327}, {"Action Name": "propelling", "Formidable": 0.189534563504845, "Friendly": -1.32199693166476, "Locomotion": 0.631301495677705, "Abducting": 1.63384313563751, "EnvironmentalInteraction": 1.08906404331035}, {"Action Name": "pushing", "Formidable": -1.3611290157909, "Friendly": -0.267427196047386, "Locomotion": -1.35894343962795, "Abducting": -0.302701160400303, "EnvironmentalInteraction": -0.600219080019637}, {"Action Name": "joshing", "Formidable": 0.46270859956374, "Friendly": -0.776610808540394, "Locomotion": 0.380413845306459, "Abducting": 0.659837797635757, "EnvironmentalInteraction": -0.212515292751184}, {"Action Name": "dismissing", "Formidable": -0.783701071850735, "Friendly": -1.12284126569806, "Locomotion": 0.834688247060968, "Abducting": 0.800672898253885, "EnvironmentalInteraction": -0.601792281203689}, {"Action Name": "transferring", "Formidable": -0.39112933033105, "Friendly": 0.438287211761702, "Locomotion": 0.168750322196434, "Abducting": -0.718724395141234, "EnvironmentalInteraction": 1.44059375521089}, {"Action Name": "inserting", "Formidable": -0.950795723032064, "Friendly": 0.117399482038982, "Locomotion": -1.1270858125384, "Abducting": -0.726174827428104, "EnvironmentalInteraction": 0.48059291594772}, {"Action Name": "placingfail", "Formidable": -0.664533693147488, "Friendly": -0.856844387925948, "Locomotion": 1.27119035532254, "Abducting": -1.48497337235991, "EnvironmentalInteraction": 0.278296194451618}, {"Action Name": "stowing", "Formidable": -0.900945404345691, "Friendly": -0.309608294828936, "Locomotion": -1.06216303334347, "Abducting": -0.806343640162821, "EnvironmentalInteraction": 0.24002481754004}, {"Action Name": "raisinghands", "Formidable": 1.41384756352456, "Friendly": 0.77065775039001, "Locomotion": -0.169322365234491, "Abducting": 0.279413264094942, "EnvironmentalInteraction": -0.990929720208293}, {"Action Name": "pocketing", "Formidable": -0.813974184000343, "Friendly": -0.6500037835397, "Locomotion": -0.0190310159407383, "Abducting": -1.05196625557102, "EnvironmentalInteraction": 0.699530867482491}, {"Action Name": "hailing", "Formidable": 1.5804517232859, "Friendly": 1.97981845364245, "Locomotion": -0.382621230643955, "Abducting": 0.00399978768645835, "EnvironmentalInteraction": -1.166604470728}, {"Action Name": "receiving", "Formidable": -0.101288228503733, "Friendly": 0.0949869654489053, "Locomotion": 0.453948486988516, "Abducting": -0.968482917906367, "EnvironmentalInteraction": 1.04444835354612}, {"Action Name": "unveiling", "Formidable": 0.0678722005007588, "Friendly": -0.00235195051279417, "Locomotion": -0.20792819582772, "Abducting": -0.488501948520436, "EnvironmentalInteraction": 0.265241584463895}, {"Action Name": "resting", "Formidable": -0.580351932401441, "Friendly": 0.444240502968401, "Locomotion": -1.43747290389427, "Abducting": -0.216260048542904, "EnvironmentalInteraction": 0.707465594935062}, {"Action Name": "playinggame", "Formidable": 1.35453595700554, "Friendly": 0.814282335197463, "Locomotion": -0.107860500910574, "Abducting": 1.14360621946772, "EnvironmentalInteraction": -0.734826608583375}, {"Action Name": "rolling", "Formidable": -1.079689305259, "Friendly": 0.05204251658227, "Locomotion": -0.458493834531226, "Abducting": -0.33261324603798, "EnvironmentalInteraction": 0.981188971556057}, {"Action Name": "thinking", "Formidable": -0.733164686316397, "Friendly": -0.231905846040355, "Locomotion": -0.803342225430127, "Abducting": -1.31797576142138, "EnvironmentalInteraction": -1.37174814111171}, {"Action Name": "rubbinghands", "Formidable": -0.866808504788488, "Friendly": 0.311376111567443, "Locomotion": -1.18878030831816, "Abducting": -0.393142506182902, "EnvironmentalInteraction": 0.113851781378871}, {"Action Name": "rubbingeyes", "Formidable": -1.12997542994218, "Friendly": -0.980669319964639, "Locomotion": -1.56033189720768, "Abducting": -1.24641692648749, "EnvironmentalInteraction": -1.09510198008547}, {"Action Name": "dragging", "Formidable": -1.12490927124072, "Friendly": -0.781381697933264, "Locomotion": 1.1603069230544, "Abducting": -0.651892318586081, "EnvironmentalInteraction": 0.817222175727934}, {"Action Name": "sprinting", "Formidable": 1.23211480826343, "Friendly": -0.699670556079498, "Locomotion": 2.10137592462979, "Abducting": 1.69204323989037, "EnvironmentalInteraction": -0.27023030424592}, {"Action Name": "jogging", "Formidable": 0.098279753488776, "Friendly": 1.40435673730994, "Locomotion": 1.50217594138562, "Abducting": 1.1525020361409, "EnvironmentalInteraction": -0.164621881015526}, {"Action Name": "saluting", "Formidable": 0.683208840372252, "Friendly": 1.03928068136565, "Locomotion": -0.962790150801982, "Abducting": 0.0444794012033934, "EnvironmentalInteraction": -0.841515157357591}, {"Action Name": "scaring", "Formidable": 0.812167467628949, "Friendly": -0.559906937231845, "Locomotion": 1.51022311856745, "Abducting": 1.08320388016568, "EnvironmentalInteraction": -0.566821357516843}, {"Action Name": "scooping", "Formidable": 0.333057432590673, "Friendly": 0.773063042358782, "Locomotion": 1.05381783192418, "Abducting": -1.44456701321519, "EnvironmentalInteraction": 2.1258962726284}, {"Action Name": "scratching", "Formidable": -1.04758583101401, "Friendly": -0.255735397381927, "Locomotion": -0.768235078231987, "Abducting": -1.22195319732396, "EnvironmentalInteraction": -1.6277229113149}, {"Action Name": "shakingobject", "Formidable": 0.865930002826948, "Friendly": -0.173300650350281, "Locomotion": -0.265942007953838, "Abducting": 0.00597025738115714, "EnvironmentalInteraction": 1.48708442784538}, {"Action Name": "shakingfist", "Formidable": 1.01550518188764, "Friendly": -0.740160955230971, "Locomotion": -0.271676287756084, "Abducting": 0.502819506365761, "EnvironmentalInteraction": -1.1413224355603}, {"Action Name": "preventing", "Formidable": 0.861528878072485, "Friendly": -0.989318363418467, "Locomotion": 1.158123359293, "Abducting": 0.18109174313519, "EnvironmentalInteraction": -1.242677363225}, {"Action Name": "shakinghead", "Formidable": -0.296215360640388, "Friendly": -1.10989786677699, "Locomotion": -0.426351667294889, "Abducting": -0.746141567289619, "EnvironmentalInteraction": -1.63581100828635}, {"Action Name": "exhibiting", "Formidable": 0.468444316309119, "Friendly": -0.367642468557712, "Locomotion": 0.278907175429604, "Abducting": -0.135778324253175, "EnvironmentalInteraction": -0.0723535724273846}, {"Action Name": "presenting", "Formidable": -0.669831791382816, "Friendly": -0.11062934517353, "Locomotion": -1.016991521294, "Abducting": -0.357634091527176, "EnvironmentalInteraction": 0.239957839646036}, {"Action Name": "showing", "Formidable": -0.760699734160542, "Friendly": 0.409539868419176, "Locomotion": -0.761887513270148, "Abducting": -0.299253346413381, "EnvironmentalInteraction": 0.119605679694133}, {"Action Name": "sittingdown", "Formidable": -0.708723710885914, "Friendly": 0.598445472564109, "Locomotion": 0.605975424433449, "Abducting": -1.26015822866456, "EnvironmentalInteraction": 0.6189922110395}, {"Action Name": "sittingup", "Formidable": -0.205419954124475, "Friendly": 0.368519539724185, "Locomotion": -0.373471698964334, "Abducting": 0.088644621955257, "EnvironmentalInteraction": 0.180960319227544}, {"Action Name": "skipping", "Formidable": 1.2404344392467, "Friendly": 2.67275758858387, "Locomotion": 2.00821741961852, "Abducting": 0.958179113062465, "EnvironmentalInteraction": -0.071316225614941}, {"Action Name": "slumping", "Formidable": -0.370942979075634, "Friendly": -0.250734588834854, "Locomotion": 0.734812521100678, "Abducting": -0.663996369753892, "EnvironmentalInteraction": 0.466272802411625}, {"Action Name": "smashing", "Formidable": 1.78911580346513, "Friendly": -2.79176177115691, "Locomotion": 1.55846693240904, "Abducting": 1.66390826943413, "EnvironmentalInteraction": 1.5077140707265}, {"Action Name": "sniffingbad", "Formidable": -0.509704158201849, "Friendly": 0.240044376962107, "Locomotion": -0.724891800153004, "Abducting": -1.16574416149717, "EnvironmentalInteraction": 0.180413085815484}, {"Action Name": "sniffinggood", "Formidable": -0.196071086559819, "Friendly": 0.38045361211868, "Locomotion": -1.38848311967927, "Abducting": -1.26242649000578, "EnvironmentalInteraction": -0.0243949671181861}, {"Action Name": "sorting", "Formidable": -0.318768422798818, "Friendly": 0.103530750848431, "Locomotion": -0.591934937234993, "Abducting": -0.375684822263282, "EnvironmentalInteraction": 1.07350928875857}, {"Action Name": "spilling", "Formidable": -0.786262846736956, "Friendly": -0.456314539915417, "Locomotion": 0.89994192742815, "Abducting": -0.547479652669512, "EnvironmentalInteraction": -0.104443357947484}, {"Action Name": "spinning", "Formidable": -0.254159808855811, "Friendly": 0.175462347287622, "Locomotion": -0.601298248343968, "Abducting": 0.240066016412169, "EnvironmentalInteraction": 0.910332223533028}, {"Action Name": "spreading", "Formidable": -0.610884980885159, "Friendly": 0.142320703271356, "Locomotion": -1.25834708705357, "Abducting": -0.75017881089685, "EnvironmentalInteraction": 0.963871320024818}, {"Action Name": "sprinkling", "Formidable": -0.452294268986529, "Friendly": 0.703484472942343, "Locomotion": -1.42635737936727, "Abducting": -0.300952994290576, "EnvironmentalInteraction": 0.852545512053855}, {"Action Name": "squatting", "Formidable": 0.256079156091588, "Friendly": 0.433238283684443, "Locomotion": 0.09446508523556, "Abducting": -0.230933345659222, "EnvironmentalInteraction": -0.218947000773581}, {"Action Name": "squeezing", "Formidable": 1.3725541924112, "Friendly": 1.89144306996398, "Locomotion": -0.399503240066156, "Abducting": -1.34969584016945, "EnvironmentalInteraction": -0.317865284302092}, {"Action Name": "clasping", "Formidable": -0.338017242575165, "Friendly": -2.32291780175899, "Locomotion": -1.2221595013594, "Abducting": 0.0413144449792305, "EnvironmentalInteraction": -1.65739273990308}, {"Action Name": "stacking", "Formidable": -0.710215263486848, "Friendly": 0.13059710650653, "Locomotion": -0.22339318804372, "Abducting": -1.25689835437826, "EnvironmentalInteraction": 0.951963699188197}, {"Action Name": "staggering", "Formidable": -0.758070987562769, "Friendly": -1.68731713460361, "Locomotion": 2.22724597215896, "Abducting": -0.287068345376382, "EnvironmentalInteraction": -1.15921648376907}, {"Action Name": "risingchair", "Formidable": -0.0973916440197901, "Friendly": 0.890564686564822, "Locomotion": 0.559584035231457, "Abducting": 0.61074163504885, "EnvironmentalInteraction": 0.186000050671361}, {"Action Name": "risingfloor", "Formidable": -0.188967030977412, "Friendly": 0.624692896095847, "Locomotion": 1.33547343917481, "Abducting": 0.748740877283171, "EnvironmentalInteraction": 0.187631760396709}, {"Action Name": "stepping", "Formidable": -1.30461219983802, "Friendly": -0.738125286188034, "Locomotion": 0.371794193359548, "Abducting": -0.476717900691275, "EnvironmentalInteraction": -1.44421116123764}, {"Action Name": "repositioning", "Formidable": -0.564034015148339, "Friendly": 0.543636286746752, "Locomotion": 0.164932247062336, "Abducting": 0.186785312901566, "EnvironmentalInteraction": -0.798483901023363}, {"Action Name": "flexing", "Formidable": 0.253509679237845, "Friendly": 0.594764152475216, "Locomotion": 0.400810311398584, "Abducting": -0.339776110798195, "EnvironmentalInteraction": -0.703449544754682}, {"Action Name": "stuffing", "Formidable": -0.611722549178009, "Friendly": 0.18128110014761, "Locomotion": -0.555670503645538, "Abducting": -0.527144829663356, "EnvironmentalInteraction": 1.10542128600582}, {"Action Name": "supporting", "Formidable": -0.184095457775753, "Friendly": -0.503354892716436, "Locomotion": 0.512989369653134, "Abducting": -0.853281680817873, "EnvironmentalInteraction": -0.356985818880573}, {"Action Name": "swingingforehand", "Formidable": 1.4094256813487, "Friendly": 0.155508667847036, "Locomotion": 1.10916276023524, "Abducting": 1.85890989841101, "EnvironmentalInteraction": 1.32746373791906}, {"Action Name": "swingingbackhand", "Formidable": 1.37772293684961, "Friendly": 1.18856396706803, "Locomotion": 1.27474305121459, "Abducting": 2.0334455170699, "EnvironmentalInteraction": 1.76753980630392}, {"Action Name": "photographing", "Formidable": 0.148202477137308, "Friendly": 1.19559294998872, "Locomotion": -1.48048312438133, "Abducting": 0.138208907543063, "EnvironmentalInteraction": 0.249243176595035}, {"Action Name": "selfieinggroup", "Formidable": 1.04975908240798, "Friendly": 0.856457799002732, "Locomotion": 0.420167633510346, "Abducting": 0.189570465460964, "EnvironmentalInteraction": -0.685257568457491}, {"Action Name": "selfieingself", "Formidable": 0.339487823501494, "Friendly": 1.32921143901819, "Locomotion": -0.567158728773214, "Abducting": -0.285829956130174, "EnvironmentalInteraction": 0.408758035772389}, {"Action Name": "stealing", "Formidable": -1.03909464935664, "Friendly": -1.29330622446834, "Locomotion": 1.18206887140376, "Abducting": -0.164662414063344, "EnvironmentalInteraction": -0.497198105944736}, {"Action Name": "unpocketing", "Formidable": -0.533532375856414, "Friendly": 0.215074208398591, "Locomotion": -0.707708434716045, "Abducting": -0.529581551651386, "EnvironmentalInteraction": 0.428611531236174}, {"Action Name": "undressing", "Formidable": -0.844595963633211, "Friendly": -0.159883979083182, "Locomotion": 0.283767527792206, "Abducting": -0.367273773190133, "EnvironmentalInteraction": -0.75687295617519}, {"Action Name": "reversing", "Formidable": -1.33741274220284, "Friendly": -0.922246787521179, "Locomotion": 1.4245042134715, "Abducting": -0.126070628875565, "EnvironmentalInteraction": -0.496838705163056}, {"Action Name": "splitting", "Formidable": -1.10144569618384, "Friendly": 0.0265417251536413, "Locomotion": -1.26929637741552, "Abducting": -0.835135692432741, "EnvironmentalInteraction": 0.546464689173245}, {"Action Name": "tearingbread", "Formidable": -1.46357339530071, "Friendly": -0.447086056599719, "Locomotion": -1.3016192120907, "Abducting": -1.01862565318031, "EnvironmentalInteraction": -0.453795351933402}, {"Action Name": "ripping", "Formidable": -0.721615712703206, "Friendly": -0.341602922828526, "Locomotion": -0.626118239201944, "Abducting": -0.462816873473465, "EnvironmentalInteraction": 0.25831951991641}, {"Action Name": "destroying", "Formidable": 0.984194327079983, "Friendly": -0.370957997205282, "Locomotion": 0.0451382527205634, "Abducting": 0.578581095114848, "EnvironmentalInteraction": 0.959103851319168}, {"Action Name": "joking", "Formidable": 0.530111842349683, "Friendly": 0.084736716646905, "Locomotion": 0.448808207508205, "Abducting": -0.233539047301215, "EnvironmentalInteraction": -1.78945892229226}, {"Action Name": "telling", "Formidable": 1.67774060646993, "Friendly": -1.086983491524, "Locomotion": -0.437288703374904, "Abducting": 0.68100185246222, "EnvironmentalInteraction": -0.683092827486176}, {"Action Name": "throwingup", "Formidable": 0.271250745896132, "Friendly": 0.443175714462123, "Locomotion": 0.0928106579732124, "Abducting": 1.24229168706237, "EnvironmentalInteraction": 0.617687853638711}, {"Action Name": "throwingside", "Formidable": 0.205892408285875, "Friendly": 0.0153416481838996, "Locomotion": 0.0169600732018453, "Abducting": 2.12352102434439, "EnvironmentalInteraction": 0.626920312288001}, {"Action Name": "thowingover", "Formidable": 0.762914310989664, "Friendly": 0.875808458222499, "Locomotion": 0.0772668027759083, "Abducting": 2.42665617094226, "EnvironmentalInteraction": 0.549841933304363}, {"Action Name": "catchinglight", "Formidable": 0.756113668859808, "Friendly": 0.525101920383655, "Locomotion": -0.0717066559189903, "Abducting": -1.14156076399381, "EnvironmentalInteraction": 1.28776017716685}, {"Action Name": "slamming", "Formidable": 1.61897632050802, "Friendly": -2.05238265483405, "Locomotion": 0.600744472287331, "Abducting": 1.35274302439182, "EnvironmentalInteraction": 0.5644872114926}, {"Action Name": "uncomprehending", "Formidable": -0.760010397555807, "Friendly": -0.134616676181523, "Locomotion": -0.888203705280941, "Abducting": -0.099691106429699, "EnvironmentalInteraction": -1.65923167223325}, {"Action Name": "tipping", "Formidable": -0.202075414303737, "Friendly": 0.0811767697136759, "Locomotion": 0.566042326159326, "Abducting": -1.24078524653711, "EnvironmentalInteraction": 1.64301200300995}, {"Action Name": "achingback", "Formidable": -1.36214432058671, "Friendly": -1.25990601366514, "Locomotion": 0.217116392170094, "Abducting": -1.10589449704504, "EnvironmentalInteraction": -1.68689772832234}, {"Action Name": "petting", "Formidable": 0.249169241829966, "Friendly": 0.751010325743979, "Locomotion": 1.13163114829305, "Abducting": -0.453116397888424, "EnvironmentalInteraction": 0.230139170333354}, {"Action Name": "achinghead", "Formidable": -1.00592065527294, "Friendly": -0.964250370361274, "Locomotion": -0.580030124407611, "Abducting": -0.607961397680416, "EnvironmentalInteraction": -0.995556380485274}, {"Action Name": "achingneck", "Formidable": -0.979168450616665, "Friendly": -0.304644118301888, "Locomotion": -0.0739533180523023, "Abducting": -0.847672766370248, "EnvironmentalInteraction": -1.29237522208123}, {"Action Name": "touching", "Formidable": -1.0488058356174, "Friendly": -0.518361751317769, "Locomotion": -0.604289344557915, "Abducting": -0.282534238123794, "EnvironmentalInteraction": 0.260975135940667}, {"Action Name": "attachingfail", "Formidable": -0.450029057844329, "Friendly": -0.213556849796337, "Locomotion": -0.283998691189153, "Abducting": -0.321390208285567, "EnvironmentalInteraction": 0.433580243502338}, {"Action Name": "bendingfail", "Formidable": -0.415483733329725, "Friendly": -1.14148814854223, "Locomotion": 1.1787116937676, "Abducting": -0.401552605138477, "EnvironmentalInteraction": 0.36018822698698}, {"Action Name": "unlockingfail", "Formidable": -0.564761185505682, "Friendly": -0.508228117431846, "Locomotion": -0.460423785360696, "Abducting": -0.260923695470472, "EnvironmentalInteraction": 0.0998642187091728}, {"Action Name": "peering", "Formidable": -1.79316488198347, "Friendly": -1.02312816723053, "Locomotion": 0.382188332998344, "Abducting": -0.713274357230161, "EnvironmentalInteraction": -1.55861899277839}, {"Action Name": "warming", "Formidable": -0.491232523840958, "Friendly": -0.705329633321494, "Locomotion": 0.377020585817925, "Abducting": -0.919741315478418, "EnvironmentalInteraction": -1.59298671672701}, {"Action Name": "turning", "Formidable": -1.34323310942381, "Friendly": -0.288584315537634, "Locomotion": 0.612670672023015, "Abducting": -0.307199618982897, "EnvironmentalInteraction": -1.20878265470259}, {"Action Name": "uncovering", "Formidable": 0.270740127779654, "Friendly": 0.461152442037428, "Locomotion": -0.429113178055602, "Abducting": -0.198700696020513, "EnvironmentalInteraction": -0.880389525545007}, {"Action Name": "unfolding", "Formidable": -0.46961392052497, "Friendly": 0.00537889874012802, "Locomotion": -1.24536971630276, "Abducting": -0.412648873889401, "EnvironmentalInteraction": 0.67748384377884}, {"Action Name": "toasting", "Formidable": 0.183128216610262, "Friendly": 0.534140503174676, "Locomotion": -0.756130244491876, "Abducting": -0.674668777518145, "EnvironmentalInteraction": 0.19070341940892999}, {"Action Name": "waiting", "Formidable": -1.66248074585304, "Friendly": 0.0533461930052844, "Locomotion": -0.112961842896783, "Abducting": -1.01113189352797, "EnvironmentalInteraction": -1.21228213091931}, {"Action Name": "walking", "Formidable": 0.909420851737377, "Friendly": 0.705047881102552, "Locomotion": 1.74719774134589, "Abducting": 0.662506432217692, "EnvironmentalInteraction": -0.263308716288294}, {"Action Name": "stamping", "Formidable": 0.465839790285888, "Friendly": -2.05343614083561, "Locomotion": 0.743198241366986, "Abducting": 1.16238822037938, "EnvironmentalInteraction": 1.39578879369947}, {"Action Name": "strolling", "Formidable": -0.507647138049283, "Friendly": 0.877490610267703, "Locomotion": 0.70122154791902, "Abducting": 0.856905076172814, "EnvironmentalInteraction": -0.650870570878578}, {"Action Name": "leaving", "Formidable": -1.33662010328629, "Friendly": -0.93848356405975, "Locomotion": 1.16297041657432, "Abducting": -0.334037902736529, "EnvironmentalInteraction": -0.890541161046274}, {"Action Name": "arguing", "Formidable": 1.42301132258505, "Friendly": -0.735745896236867, "Locomotion": 0.661455314244851, "Abducting": 0.876952106273976, "EnvironmentalInteraction": -0.98759436671145}, {"Action Name": "talking", "Formidable": 0.219512670948268, "Friendly": -0.116953456409864, "Locomotion": 1.15411878494702, "Abducting": 0.118501619583814, "EnvironmentalInteraction": -0.846195878497275}, {"Action Name": "washing", "Formidable": -0.523429582339967, "Friendly": -0.0462243541945801, "Locomotion": -1.22210368033314, "Abducting": -0.449410458639304, "EnvironmentalInteraction": 0.333702904622153}, {"Action Name": "wavinggoodbye", "Formidable": 1.52423669551052, "Friendly": 2.58540230758022, "Locomotion": -0.645648438440396, "Abducting": 0.956281504731411, "EnvironmentalInteraction": -1.43450372562406}, {"Action Name": "wavinghello", "Formidable": 2.06179006918144, "Friendly": 2.89947329840405, "Locomotion": 0.159940738347899, "Abducting": 0.71790313038561, "EnvironmentalInteraction": -1.44421584953485}, {"Action Name": "signalling", "Formidable": 2.14352688411082, "Friendly": 1.68254672504333, "Locomotion": 0.126630823956882, "Abducting": 1.40199317365965, "EnvironmentalInteraction": -1.16646865339906}, {"Action Name": "whispering", "Formidable": -0.594350841055055, "Friendly": -0.446712689518519, "Locomotion": 0.00594265117781555, "Abducting": -0.186796483189732, "EnvironmentalInteraction": -0.946799986345017}, {"Action Name": "wielding", "Formidable": 1.32336940411038, "Friendly": -0.664555386523984, "Locomotion": 0.581767461686402, "Abducting": 0.736668871091288, "EnvironmentalInteraction": 0.263367551064877}, {"Action Name": "cleaning", "Formidable": -0.0443133368642694, "Friendly": 0.743634732380189, "Locomotion": -0.43176438738481, "Abducting": 0.124849150142886, "EnvironmentalInteraction": 0.776738800081557}, {"Action Name": "wipingface", "Formidable": -0.375724092384582, "Friendly": -0.189415896817776, "Locomotion": -1.29846485027852, "Abducting": -1.1486208897252, "EnvironmentalInteraction": -0.436590175133641}, {"Action Name": "wipingsurface", "Formidable": -0.769089308062992, "Friendly": 0.692803009813162, "Locomotion": -0.376358521597314, "Abducting": 0.393181730917589, "EnvironmentalInteraction": 1.73494337719065}, {"Action Name": "wringing", "Formidable": -0.488599931330635, "Friendly": 0.276921658413737, "Locomotion": -0.723365248016213, "Abducting": -0.471642974612028, "EnvironmentalInteraction": 1.25368171997066}, {"Action Name": "writingsurface", "Formidable": -0.84198611607919, "Friendly": -0.0493239016385594, "Locomotion": -1.36568311918376, "Abducting": -0.292172783619278, "EnvironmentalInteraction": 1.14400801158398}, {"Action Name": "writingwall", "Formidable": 0.435961748237358, "Friendly": 0.797624662504538, "Locomotion": -0.521220898493766, "Abducting": 0.360329193427497, "EnvironmentalInteraction": 0.318906050929265}]};
+const FACTORS = DATA.factors;
+const ACTIONS = DATA.actions;
+
+/* ---------- STATE ---------- */
+let axisX = FACTORS[0], axisY = FACTORS[1], axisZ = FACTORS[2];
+let colorRG = FACTORS[3], colorBY = FACTORS[4];
+let showAllLabels = false;
+let autoRotate = false;
+let pointScale = 1;
+
+/* min/max per factor for normalisation */
+const RANGE = {};
+FACTORS.forEach(f=>{
+  let vals = ACTIONS.map(a=>a[f]);
+  RANGE[f] = {min: Math.min(...vals), max: Math.max(...vals)};
+});
+function norm(f, v){ // -> [-1, 1]
+  const r = RANGE[f];
+  const mid = (r.max + r.min)/2, half = (r.max - r.min)/2 || 1;
+  return (v - mid) / half;
+}
+
+/* ---------- Lab -> RGB (opponent colour axes) ---------- */
+function labToRgb(L, a, b){
+  let y = (L + 16) / 116;
+  let x = a / 500 + y;
+  let z = y - b / 200;
+  function inv(t){ return t*t*t > 0.008856 ? t*t*t : (t - 16/116)/7.787; }
+  x = 0.95047 * inv(x); y = 1.00000 * inv(y); z = 1.08883 * inv(z);
+  let r =  x*3.2406 + y*-1.5372 + z*-0.4986;
+  let g =  x*-0.9689 + y*1.8758 + z*0.0415;
+  let bl = x*0.0557 + y*-0.2040 + z*1.0570;
+  function gam(c){ c = c<=0.0031308 ? 12.92*c : 1.055*Math.pow(c,1/2.4)-0.055; return Math.min(1,Math.max(0,c)); }
+  return [gam(r), gam(g), gam(bl)];
+}
+function actionColor(a){
+  const t1 = norm(colorRG, a[colorRG]); // -1..1 -> green..red
+  const t2 = norm(colorBY, a[colorBY]); // -1..1 -> blue..yellow
+  // CIELAB opponent channels: +a=red/-a=green, +b=yellow/-b=blue
+  const [r,g,b] = labToRgb(62, t1*70, t2*70);
+  return new THREE.Color(r,g,b);
+}
+
+/* ---------- THREE SETUP ---------- */
+const wrap = document.getElementById('canvas-wrap');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0d12);
+scene.fog = new THREE.Fog(0x0b0d12, 14, 32);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 100);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+wrap.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+const dl = new THREE.DirectionalLight(0xffffff, 0.9);
+dl.position.set(5,8,6);
+scene.add(dl);
+const dl2 = new THREE.DirectionalLight(0x88aaff, 0.25);
+dl2.position.set(-6,-3,-4);
+scene.add(dl2);
+
+const HALF = 5; // cube half-extent
+
+/* --- custom orbit controls (no external addon needed) --- */
+let spherical = {radius: 15, theta: Math.PI*0.28, phi: Math.PI*0.38};
+let target = new THREE.Vector3(0,0,0);
+let dragging = false, panning = false, lastX=0, lastY=0;
+function updateCamera(){
+  const s = spherical;
+  const x = target.x + s.radius * Math.sin(s.phi) * Math.sin(s.theta);
+  const y = target.y + s.radius * Math.cos(s.phi);
+  const z = target.z + s.radius * Math.sin(s.phi) * Math.cos(s.theta);
+  camera.position.set(x,y,z);
+  camera.lookAt(target);
+}
+updateCamera();
+
+renderer.domElement.addEventListener('mousedown', e=>{
+  if(e.button===2){ panning = true; } else { dragging = true; }
+  lastX = e.clientX; lastY = e.clientY;
+});
+window.addEventListener('mouseup', ()=>{dragging=false; panning=false;});
+window.addEventListener('mousemove', e=>{
+  const dx = e.clientX - lastX, dy = e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  if(dragging){
+    spherical.theta -= dx * 0.006;
+    spherical.phi -= dy * 0.006;
+    spherical.phi = Math.max(0.08, Math.min(Math.PI-0.08, spherical.phi));
+    updateCamera();
+  } else if(panning){
+    const panSpeed = spherical.radius * 0.0012;
+    const camRight = new THREE.Vector3().setFromMatrixColumn(camera.matrix,0);
+    const camUp = new THREE.Vector3().setFromMatrixColumn(camera.matrix,1);
+    target.addScaledVector(camRight, -dx*panSpeed);
+    target.addScaledVector(camUp, dy*panSpeed);
+    updateCamera();
+  }
+});
+renderer.domElement.addEventListener('contextmenu', e=>e.preventDefault());
+renderer.domElement.addEventListener('wheel', e=>{
+  e.preventDefault();
+  spherical.radius *= (1 + Math.sign(e.deltaY)*0.08);
+  spherical.radius = Math.max(4, Math.min(40, spherical.radius));
+  updateCamera();
+}, {passive:false});
+
+/* ---------- themes (screen vs. publication export) ---------- */
+const THEMES = {
+  dark:  {bg:0x0b0d12, grid:0x2a3040, axis:{x:0xff8a80,y:0x82e0aa,z:0x82b1ff}, low:'#5a6272', labelText:'#c9d1e0'},
+  light: {bg:0xffffff, grid:0xc7cdd8, axis:{x:0xc0392b,y:0x1e8449,z:0x1a5fb4}, low:'#8a92a3', labelText:'#20242e'}
+};
+let activeTheme = 'dark';
+function applyTheme(name){
+  activeTheme = name;
+  scene.background = new THREE.Color(THEMES[name].bg);
+  buildAxes();
+}
+
+/* ---------- axes, grid, ticks ---------- */
+let axesGroup = new THREE.Group();
+scene.add(axesGroup);
+
+function makeTextSprite(text, color){
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const fontSize = 44;
+  ctx.font = `600 ${fontSize}px ${getComputedStyle(document.body).fontFamily}`;
+  const w = Math.ceil(ctx.measureText(text).width) + 24;
+  canvas.width = w; canvas.height = fontSize*1.5;
+  ctx.font = `600 ${fontSize}px ${getComputedStyle(document.body).fontFamily}`;
+  ctx.fillStyle = color;
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 12, canvas.height/2);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.LinearFilter;
+  const mat = new THREE.SpriteMaterial({map:tex, depthTest:false, transparent:true});
+  const sprite = new THREE.Sprite(mat);
+  const scaleF = 0.014;
+  sprite.scale.set(canvas.width*scaleF, canvas.height*scaleF, 1);
+  sprite.renderOrder = 999;
+  return sprite;
+}
+
+function buildAxes(){
+  while(axesGroup.children.length) axesGroup.remove(axesGroup.children[0]);
+  const theme = THEMES[activeTheme];
+
+  const grid = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(HALF*2,HALF*2,HALF*2)),
+    new THREE.LineBasicMaterial({color:theme.grid, transparent:true, opacity:0.55})
+  );
+  axesGroup.add(grid);
+
+  const axisDefs = [
+    {dir:new THREE.Vector3(1,0,0), color:theme.axis.x, label:axisX},
+    {dir:new THREE.Vector3(0,1,0), color:theme.axis.y, label:axisY},
+    {dir:new THREE.Vector3(0,0,1), color:theme.axis.z, label:axisZ},
+  ];
+  axisDefs.forEach(ax=>{
+    const points = [ax.dir.clone().multiplyScalar(-HALF-0.3), ax.dir.clone().multiplyScalar(HALF+0.3)];
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    const mat = new THREE.LineBasicMaterial({color:ax.color});
+    axesGroup.add(new THREE.Line(geo, mat));
+
+    const labelPos = ax.dir.clone().multiplyScalar(HALF+1.0);
+    const sprite = makeTextSprite(ax.label, '#'+ax.color.toString(16).padStart(6,'0'));
+    sprite.position.copy(labelPos);
+    axesGroup.add(sprite);
+
+    const labelNeg = makeTextSprite('low', theme.low);
+    labelNeg.scale.multiplyScalar(0.55);
+    labelNeg.position.copy(ax.dir.clone().multiplyScalar(-HALF-0.9));
+    axesGroup.add(labelNeg);
+  });
+}
+buildAxes();
+
+/* ---------- points ---------- */
+const sphereGeo = new THREE.SphereGeometry(0.085, 16, 16);
+let pointMeshes = [];
+let pointsGroup = new THREE.Group();
+scene.add(pointsGroup);
+
+function buildPoints(){
+  while(pointsGroup.children.length) pointsGroup.remove(pointsGroup.children[0]);
+  pointMeshes = [];
+  ACTIONS.forEach(a=>{
+    const mat = new THREE.MeshStandardMaterial({
+      color: actionColor(a), roughness:0.4, metalness:0.15,
+      emissive: 0x000000
+    });
+    const mesh = new THREE.Mesh(sphereGeo, mat);
+    mesh.position.set(
+      norm(axisX, a[axisX]) * HALF,
+      norm(axisY, a[axisY]) * HALF,
+      norm(axisZ, a[axisZ]) * HALF
+    );
+    mesh.scale.setScalar(pointScale);
+    mesh.userData = a;
+    pointsGroup.add(mesh);
+    pointMeshes.push(mesh);
+  });
+}
+buildPoints();
+
+/* ---------- HTML labels (projected each frame) ---------- */
+const labelLayer = document.getElementById('app');
+let labelDivs = new Map();
+function ensureLabelDivs(){
+  labelDivs.forEach(d=>d.remove());
+  labelDivs.clear();
+  if(!showAllLabels) return;
+  pointMeshes.forEach(m=>{
+    const div = document.createElement('div');
+    div.className = 'labelDiv';
+    div.textContent = m.userData['Action Name'];
+    labelLayer.appendChild(div);
+    labelDivs.set(m, div);
+  });
+}
+ensureLabelDivs();
+
+/* ---------- hover tooltip + highlight ---------- */
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+const tooltip = document.getElementById('tooltip');
+let hovered = null;
+
+renderer.domElement.addEventListener('mousemove', e=>{
+  mouse.x = (e.clientX/window.innerWidth)*2 - 1;
+  mouse.y = -(e.clientY/window.innerHeight)*2 + 1;
+});
+
+function pickHover(){
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(pointMeshes);
+  if(hits.length){
+    const m = hits[0].object;
+    if(hovered !== m){
+      if(hovered) hovered.scale.setScalar(pointScale);
+      hovered = m;
+      hovered.scale.setScalar(pointScale*1.9);
+    }
+    const a = m.userData;
+    tooltip.innerHTML = `<span class="name">${a['Action Name']}</span><br>` +
+      FACTORS.map(f=>`<span class="f">${f}:</span> ${a[f].toFixed(2)}`).join('<br>');
+    tooltip.style.display = 'block';
+  } else {
+    if(hovered){ hovered.scale.setScalar(pointScale); hovered = null; }
+    tooltip.style.display = 'none';
+  }
+}
+
+window.addEventListener('mousemove', e=>{
+  tooltip.style.left = (e.clientX+14)+'px';
+  tooltip.style.top = (e.clientY+14)+'px';
+});
+
+/* ---------- UI wiring ---------- */
+function fillSelect(sel, value){
+  sel.innerHTML = '';
+  FACTORS.forEach(f=>{
+    const opt = document.createElement('option');
+    opt.value = f; opt.textContent = f;
+    sel.appendChild(opt);
+  });
+  sel.value = value;
+}
+const selX = document.getElementById('sel-x');
+const selY = document.getElementById('sel-y');
+const selZ = document.getElementById('sel-z');
+const selRG = document.getElementById('sel-rg');
+const selBY = document.getElementById('sel-by');
+
+function refreshSelects(){
+  fillSelect(selX, axisX);
+  fillSelect(selY, axisY);
+  fillSelect(selZ, axisZ);
+  fillSelect(selRG, colorRG);
+  fillSelect(selBY, colorBY);
+  document.getElementById('rg-lo').textContent = colorRG+' \u2212';
+  document.getElementById('rg-hi').textContent = colorRG+' +';
+  document.getElementById('by-lo').textContent = colorBY+' \u2212';
+  document.getElementById('by-hi').textContent = colorBY+' +';
+}
+refreshSelects();
+
+function reassign(newVal, role){
+  const slots = {x:'axisX', y:'axisY', z:'axisZ', rg:'colorRG', by:'colorBY'};
+  const vars = {axisX, axisY, axisZ, colorRG, colorBY};
+  // find who currently holds newVal, swap with role's old value
+  const oldVal = vars[slots[role]];
+  let holderRole = null;
+  for(const r in slots){ if(vars[slots[r]] === newVal) holderRole = r; }
+  vars[slots[role]] = newVal;
+  if(holderRole && holderRole !== role) vars[slots[holderRole]] = oldVal;
+  axisX=vars.axisX; axisY=vars.axisY; axisZ=vars.axisZ; colorRG=vars.colorRG; colorBY=vars.colorBY;
+  refreshSelects();
+  buildAxes();
+  buildPoints();
+  ensureLabelDivs();
+}
+selX.addEventListener('change', e=>reassign(e.target.value,'x'));
+selY.addEventListener('change', e=>reassign(e.target.value,'y'));
+selZ.addEventListener('change', e=>reassign(e.target.value,'z'));
+selRG.addEventListener('change', e=>reassign(e.target.value,'rg'));
+selBY.addEventListener('change', e=>reassign(e.target.value,'by'));
+
+document.getElementById('toggle-labels').addEventListener('change', e=>{
+  showAllLabels = e.target.checked;
+  ensureLabelDivs();
+});
+document.getElementById('toggle-spin').addEventListener('change', e=>{
+  autoRotate = e.target.checked;
+});
+document.getElementById('sizeSlider').addEventListener('input', e=>{
+  pointScale = parseFloat(e.target.value);
+  pointMeshes.forEach(m=>{ if(m!==hovered) m.scale.setScalar(pointScale); });
+});
+
+document.getElementById('count').textContent = ACTIONS.length + ' actions';
+
+/* ---------- publication export ---------- */
+const exportRenderer = new THREE.WebGLRenderer({antialias:true, preserveDrawingBuffer:true, alpha:true});
+// not attached to the DOM - renders off-screen so the live view never flickers
+
+function captureCanvas(multiplier, bgMode){
+  const w = Math.min(6000, Math.round(window.innerWidth * multiplier));
+  const h = Math.min(6000, Math.round(window.innerHeight * multiplier));
+
+  // clear any hover highlight so the export is clean
+  if(hovered){ hovered.scale.setScalar(pointScale); hovered = null; }
+  tooltip.style.display = 'none';
+
+  const savedAspect = camera.aspect;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+
+  const themeForExport = (bgMode === 'transparent') ? 'light' : bgMode;
+  applyTheme(themeForExport);
+
+  exportRenderer.setSize(w, h, false);
+  if(bgMode === 'transparent'){
+    exportRenderer.setClearColor(0x000000, 0);
+  } else {
+    exportRenderer.setClearColor(THEMES[themeForExport].bg, 1);
+  }
+  exportRenderer.render(scene, camera);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(exportRenderer.domElement, 0, 0, w, h);
+
+  if(showAllLabels){
+    ctx.font = `${Math.round(13*multiplier)}px monospace`;
+    ctx.fillStyle = THEMES[themeForExport].labelText;
+    ctx.textBaseline = 'middle';
+    const proj = new THREE.Vector3();
+    pointMeshes.forEach(m=>{
+      proj.copy(m.position).project(camera);
+      if(proj.z > 1) return;
+      const x = (proj.x*0.5+0.5)*w;
+      const y = (-proj.y*0.5+0.5)*h;
+      ctx.fillText(m.userData['Action Name'], x + 6*multiplier, y - 6*multiplier);
+    });
+  }
+
+  // revert to live view
+  camera.aspect = savedAspect;
+  camera.updateProjectionMatrix();
+  applyTheme('dark');
+
+  return canvas;
+}
+
+function exportFilename(){
+  return (document.getElementById('exp-name').value || 'action_space').trim().replace(/[^a-z0-9_\-]/gi,'_');
+}
+
+document.getElementById('btn-png').addEventListener('click', ()=>{
+  const multiplier = parseFloat(document.getElementById('exp-res').value);
+  const bgMode = document.getElementById('exp-bg').value;
+  const canvas = captureCanvas(multiplier, bgMode);
+  const link = document.createElement('a');
+  link.download = exportFilename() + '.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+});
+
+document.getElementById('btn-pdf').addEventListener('click', ()=>{
+  const multiplier = parseFloat(document.getElementById('exp-res').value);
+  let bgMode = document.getElementById('exp-bg').value;
+  if(bgMode === 'transparent') bgMode = 'light'; // PDFs need an opaque page
+  const canvas = captureCanvas(multiplier, bgMode);
+  const imgData = canvas.toDataURL('image/png');
+  const { jsPDF } = window.jspdf;
+  const dpi = 300;
+  const wIn = canvas.width / dpi, hIn = canvas.height / dpi;
+  const pdf = new jsPDF({orientation: wIn > hIn ? 'landscape' : 'portrait', unit:'in', format:[wIn, hIn]});
+  pdf.addImage(imgData, 'PNG', 0, 0, wIn, hIn);
+  pdf.save(exportFilename() + '.pdf');
+});
+
+/* ---------- resize ---------- */
+window.addEventListener('resize', ()=>{
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+/* ---------- render loop ---------- */
+const projVec = new THREE.Vector3();
+function animate(){
+  requestAnimationFrame(animate);
+  if(autoRotate){ spherical.theta += 0.0028; updateCamera(); }
+  pickHover();
+
+  if(showAllLabels){
+    labelDivs.forEach((div, mesh)=>{
+      projVec.copy(mesh.position).project(camera);
+      const x = (projVec.x*0.5+0.5)*window.innerWidth;
+      const y = (-projVec.y*0.5+0.5)*window.innerHeight;
+      const behind = projVec.z > 1;
+      div.style.display = behind ? 'none' : 'block';
+      div.style.left = x+'px';
+      div.style.top = y+'px';
+    });
+  }
+
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
